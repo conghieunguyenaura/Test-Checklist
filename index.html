@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ Thống Checklist Nghiệm Thu</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+    <!-- Header -->
+    <header class="bg-indigo-700 text-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <i data-lucide="clipboard-check" class="w-8 h-8 text-amber-400"></i>
+                <div>
+                    <h1 class="text-xl font-bold leading-tight">Checklist Nghiệm Thu</h1>
+                    <p class="text-xs text-indigo-200">Đồng bộ Google Sheets & Google Drive</p>
+                </div>
+            </div>
+            <button id="configBtn" class="p-2 hover:bg-indigo-600 rounded-lg transition-colors flex items-center gap-1 text-xs font-medium border border-indigo-500">
+                <i data-lucide="settings" class="w-4 h-4"></i>
+                <span>Cấu hình Web App URL</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto px-4 py-6">
+
+        <!-- Banner cảnh báo chưa cấu hình Apps Script -->
+        <div id="setupNotice" class="mb-6 p-4 bg-amber-50 border-l-4 border-amber-500 rounded-r-lg shadow-sm">
+            <div class="flex items-start justify-between">
+                <div class="flex items-start space-x-3">
+                    <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 mt-0.5"></i>
+                    <div>
+                        <h3 class="font-semibold text-amber-800 text-sm">Chế độ Chạy Thử (Test Mode / Local)</h3>
+                        <p class="text-xs text-amber-700 mt-1">Hiện tại bạn chưa dán URL Google Apps Script. Dữ liệu sẽ lưu tạm ở bộ nhớ trình duyệt. Bấm nút <b>"Cấu hình Web App URL"</b> để kết nối Sheets & Drive.</p>
+                    </div>
+                </div>
+                <button onclick="toggleInstructions()" class="text-xs text-amber-800 underline font-semibold hover:text-amber-900">Xem hướng dẫn cài đặt</button>
+            </div>
+        </div>
+
+        <!-- Hướng dẫn Cài đặt Google Apps Script -->
+        <div id="instructionsPanel" class="hidden mb-6 bg-white p-6 rounded-xl border border-slate-200 shadow-sm transition-all">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="code-2" class="w-5 h-5 text-indigo-600"></i>
+                    Mã Google Apps Script (3 bước đơn giản)
+                </h3>
+                <button onclick="toggleInstructions()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <ol class="list-decimal list-inside text-xs text-slate-600 space-y-2 mb-4">
+                <li>Mở file Google Sheet của bạn &gt; Chọn <b>Tiện ích mở rộng (Extensions)</b> &gt; <b>Apps Script</b>.</li>
+                <li>Xóa toàn bộ code cũ, dán đoạn code Google Apps Script ở phía dưới vào và thay <code>FOLDER_ID</code> bằng ID thư mục Google Drive của bạn.</li>
+                <li>Nhấn <b>Triển khai (Deploy)</b> &gt; <b>Thực thi dưới dạng Web app</b> &gt; Chọn quyền truy cập: <b>"Ai cũng có thể truy cập" (Anyone)</b> &gt; Copy URL Web App và dán vào phần cấu hình trang này.</li>
+            </ol>
+            <div class="relative">
+                <pre id="gasCode" class="bg-slate-900 text-slate-200 p-4 rounded-lg text-xs overflow-x-auto max-h-48 font-mono">
+function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    var folderId = "THAY_FOLDER_ID_DRIVE_CUO_BAN_VAO_DAY"; // ID Thư mục Drive
+    var folder = DriveApp.getFolderById(folderId);
+
+    // Xử lý lưu file hình ảnh
+    var fileUrl = "";
+    if (data.image) {
+      var contentType = data.image.substring(5, data.image.indexOf(';'));
+      var bytes = Utilities.base64Decode(data.image.substr(data.image.indexOf('base64,') + 7));
+      var blob = Utilities.newBlob(bytes, contentType, data.imageName || "NghiemThu_" + Date.now() + ".jpg");
+      var file = folder.createFile(blob);
+      fileUrl = file.getUrl();
+    }
+
+    // Ghi dữ liệu vào Google Sheet
+    sheet.appendRow([
+      new Date(),
+      data.projectName,
+      data.itemCheck,
+      data.inspector,
+      data.status,
+      data.notes,
+      fileUrl
+    ]);
+
+    return ContentService.createTextOutput(JSON.stringify({result: "success", fileUrl: fileUrl}))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({result: "error", error: err.toString()}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}</pre>
+                <button onclick="copyGasCode()" class="absolute top-2 right-2 bg-slate-700 hover:bg-slate-600 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
+                    <i data-lucide="copy" class="w-3.5 h-3.5"></i> Sao chép
+                </button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+            <!-- Form Nghiệm thu -->
+            <div class="lg:col-span-6 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <h2 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <i data-lucide="plus-circle" class="w-5 h-5 text-indigo-600"></i>
+                    Tạo Hạng Mục Nghiệm Thu
+                </h2>
+
+                <form id="inspectionForm" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Tên Dự Án / Công Trình *</label>
+                        <input type="text" id="projectName" required value="Dự án Tòa nhà Sunrise Tower" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Hạng Mục Kiểm Tra *</label>
+                        <input type="text" id="itemCheck" required placeholder="Ví dụ: Lắp đặt tủ điện tầng 5" value="Kiểm tra công tác sơn nước tầng 3" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Người Nghiệm Thu *</label>
+                            <input type="text" id="inspector" required value="Nguyễn Văn A" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Đánh Giá *</label>
+                            <select id="status" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none font-medium">
+                                <option value="Đạt" class="text-emerald-600">✓ Đạt yêu cầu</option>
+                                <option value="Không đạt" class="text-rose-600">✕ Không đạt</option>
+                                <option value="Cần sửa chữa" class="text-amber-600">⚠ Cần sửa chữa</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Ghi Chú / Bổ Sung</label>
+                        <textarea id="notes" rows="2" placeholder="Nhập thêm nhận xét chi tiết..." class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none">Sơn đều màu, bề mặt mịn, đã dọn vệ sinh sạch sẻ.</textarea>
+                    </div>
+
+                    <!-- Upload Hình ảnh (1 hình đại diện cho Test) -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Hình Ảnh Nghiệm Thu (1 Ảnh)</label>
+                        <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-slate-300 border-dashed rounded-xl hover:border-indigo-400 transition-colors bg-slate-50 cursor-pointer relative" id="dropArea">
+                            <input type="file" id="imageInput" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                            <div class="text-center space-y-1" id="uploadPlaceholder">
+                                <i data-lucide="image-plus" class="mx-auto h-8 w-8 text-slate-400"></i>
+                                <div class="text-xs text-slate-600">
+                                    <span class="font-medium text-indigo-600 hover:text-indigo-500">Bấm để chọn hình ảnh</span> hoặc kéo thả vào đây
+                                </div>
+                                <p class="text-[10px] text-slate-400">PNG, JPG, WEBP tối đa 5MB</p>
+                            </div>
+                        </div>
+
+                        <!-- Image Preview -->
+                        <div id="imagePreviewContainer" class="hidden mt-3 relative rounded-lg border border-slate-200 overflow-hidden bg-slate-100">
+                            <img id="imagePreview" src="" alt="Preview" class="w-full h-48 object-cover">
+                            <button type="button" id="removeImgBtn" class="absolute top-2 right-2 p-1 bg-red-600 text-white rounded-full hover:bg-red-700 shadow-md">
+                                <i data-lucide="x" class="w-4 h-4"></i>
+                            </button>
+                            <div class="p-2 bg-white text-xs text-slate-600 border-t flex justify-between items-center">
+                                <span id="imgName" class="truncate font-mono text-[11px]">filename.jpg</span>
+                                <span id="imgSize" class="text-slate-400 text-[10px]"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" id="submitBtn" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all flex justify-center items-center gap-2">
+                        <i data-lucide="send" class="w-4 h-4"></i>
+                        <span>Lưu & Gửi Nghiệm Thu</span>
+                    </button>
+                </form>
+            </div>
+
+            <!-- Dữ liệu vừa gửi / Lịch sử Local -->
+            <div class="lg:col-span-6 space-y-6">
+                <!-- Card trạng thái gửi -->
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <h2 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <i data-lucide="database" class="w-5 h-5 text-indigo-600"></i>
+                        Dữ Liệu Đã Lưu (Mới Nhất)
+                    </h2>
+
+                    <div id="latestDataContainer" class="space-y-3">
+                        <p class="text-xs text-slate-400 italic text-center py-8 border border-dashed rounded-lg">Chưa có dữ liệu nào được gửi trong phiên này.</p>
+                    </div>
+                </div>
+
+                <!-- Thống kê & Mẹo test -->
+                <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-xs text-indigo-900 space-y-2">
+                    <h4 class="font-bold flex items-center gap-1.5 text-indigo-800">
+                        <i data-lucide="info" class="w-4 h-4"></i> Hướng Dẫn Test Nhanh
+                    </h4>
+                    <p>1. Form đã điền sẵn 1 dòng dữ liệu mẫu và hình ảnh minh họa giả lập.</p>
+                    <p>2. Chọn một tấm ảnh thực tế từ máy/điện thoại của bạn.</p>
+                    <p>3. Nhấn <b>"Lưu & Gửi Nghiệm Thu"</b>. Dữ liệu sẽ xuất hiện lập tức ở ô bên trên.</p>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Modal Cấu hình URL Apps Script -->
+    <div id="configModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-100">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-base font-bold text-slate-800">Cấu hình URL Google Web App</h3>
+                <button id="closeModalBtn" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <p class="text-xs text-slate-500 mb-4">Dán đường dẫn (Web App Exec URL) từ Google Apps Script sau khi triển khai để lưu số liệu trực tiếp vào Sheets và hình ảnh vào Drive.</p>
+            <input type="url" id="appScriptUrlInput" placeholder="https://script.google.com/macros/s/.../exec" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none mb-4 font-mono">
+            <div class="flex justify-end gap-2">
+                <button id="clearUrlBtn" class="px-3 py-1.5 text-xs font-medium text-rose-600 border border-rose-200 hover:bg-rose-50 rounded-lg">Xóa URL</button>
+                <button id="saveUrlBtn" class="px-4 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg">Lưu Cấu Hình</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Toast Alert -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-800 text-white text-xs px-4 py-3 rounded-lg shadow-xl hidden flex items-center gap-2 z-50 transition-all transform translate-y-2">
+        <i id="toastIcon" data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
+        <span id="toastMsg">Thành công!</span>
+    </div>
+
+    <script>
+        // Khởi tạo Lucide Icons
+        lucide.createIcons();
+
+        // State quản lý
+        let currentBase64Image = null;
+        let currentImageName = "";
+        let webAppUrl = localStorage.getItem("gas_webapp_url") || "";
+
+        // Elements
+        const configBtn = document.getElementById('configBtn');
+        const configModal = document.getElementById('configModal');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const saveUrlBtn = document.getElementById('saveUrlBtn');
+        const clearUrlBtn = document.getElementById('clearUrlBtn');
+        const appScriptUrlInput = document.getElementById('appScriptUrlInput');
+        const setupNotice = document.getElementById('setupNotice');
+
+        const imageInput = document.getElementById('imageInput');
+        const uploadPlaceholder = document.getElementById('uploadPlaceholder');
+        const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+        const imagePreview = document.getElementById('imagePreview');
+        const removeImgBtn = document.getElementById('removeImgBtn');
+        const imgName = document.getElementById('imgName');
+        const imgSize = document.getElementById('imgSize');
+
+        const inspectionForm = document.getElementById('inspectionForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const latestDataContainer = document.getElementById('latestDataContainer');
+
+        // Khởi tạo ban đầu
+        if (webAppUrl) {
+            appScriptUrlInput.value = webAppUrl;
+            setupNotice.classList.add('hidden');
+        }
+
+        // Đóng / Mở Modal Cấu Hình
+        configBtn.addEventListener('click', () => configModal.classList.remove('hidden'));
+        closeModalBtn.addEventListener('click', () => configModal.classList.add('hidden'));
+
+        // Lưu Web App URL
+        saveUrlBtn.addEventListener('click', () => {
+            const url = appScriptUrlInput.value.trim();
+            if (url && !url.startsWith('https://script.google.com')) {
+                showToast('URL Google Apps Script không hợp lệ!', 'alert');
+                return;
+            }
+            webAppUrl = url;
+            localStorage.setItem("gas_webapp_url", url);
+            configModal.classList.add('hidden');
+            if (url) {
+                setupNotice.classList.add('hidden');
+                showToast('Đã lưu URL cấu hình thành công!');
+            } else {
+                setupNotice.classList.remove('hidden');
+            }
+        });
+
+        clearUrlBtn.addEventListener('click', () => {
+            webAppUrl = "";
+            appScriptUrlInput.value = "";
+            localStorage.removeItem("gas_webapp_url");
+            configModal.classList.add('hidden');
+            setupNotice.classList.remove('hidden');
+            showToast('Đã xóa URL Web App');
+        });
+
+        // Toggle Hướng Dẫn
+        function toggleInstructions() {
+            const panel = document.getElementById('instructionsPanel');
+            panel.classList.toggle('hidden');
+        }
+
+        // Sao chép code GAS
+        function copyGasCode() {
+            const codeText = document.getElementById('gasCode').innerText;
+            const textarea = document.createElement('textarea');
+            textarea.value = codeText;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            showToast('Đã sao chép mã Google Apps Script!');
+        }
+
+        // Xử lý Upload Ảnh & Chuyển sang Base64
+        imageInput.addEventListener('change', handleFileSelect);
+
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            if (file.size > 5 * 1024 * 1024) {
+                showToast('Dung lượng ảnh vượt quá 5MB. Vui lòng chọn ảnh nhỏ hơn!', 'alert');
+                return;
+            }
+
+            currentImageName = file.name;
+            const reader = new FileReader();
+
+            reader.onload = function(evt) {
+                currentBase64Image = evt.target.result;
+                imagePreview.src = currentBase64Image;
+                imgName.textContent = file.name;
+                imgSize.textContent = (file.size / 1024).toFixed(1) + ' KB';
+                
+                uploadPlaceholder.classList.add('hidden');
+                imagePreviewContainer.classList.remove('hidden');
+            };
+
+            reader.readAsDataURL(file);
+        }
+
+        removeImgBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            currentBase64Image = null;
+            currentImageName = "";
+            imageInput.value = "";
+            imagePreview.src = "";
+            uploadPlaceholder.classList.remove('hidden');
+            imagePreviewContainer.classList.add('hidden');
+        });
+
+        // Tạo ảnh giả lập để test nếu người dùng không chọn ảnh
+        function createDummyImage() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 400;
+            canvas.height = 300;
+            const ctx = canvas.getContext('2d');
+            
+            // Background
+            ctx.fillStyle = '#3b82f6';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Text
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 20px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('ẢNH TEST NGHIỆM THU', canvas.width / 2, canvas.height / 2 - 10);
+            ctx.font = '14px Inter, sans-serif';
+            ctx.fillText(new Date().toLocaleString('vi-VN'), canvas.width / 2, canvas.height / 2 + 20);
+
+            currentImageName = "Anh_Test_NghiemThu.jpg";
+            return canvas.toDataURL('image/jpeg');
+        }
+
+        // Xử lý gửi Form
+        inspectionForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            // Lấy thông tin form
+            const formData = {
+                projectName: document.getElementById('projectName').value,
+                itemCheck: document.getElementById('itemCheck').value,
+                inspector: document.getElementById('inspector').value,
+                status: document.getElementById('status').value,
+                notes: document.getElementById('notes').value,
+                image: currentBase64Image || createDummyImage(),
+                imageName: currentImageName || "Anh_Test.jpg"
+            };
+
+            // Trạng thái Loading Button
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> <span>Đang xử lý & Lưu...</span>`;
+            lucide.createIcons();
+
+            try {
+                let driveUrl = "";
+
+                if (webAppUrl) {
+                    // Gửi tới Google Apps Script
+                    const response = await fetch(webAppUrl, {
+                        method: 'POST',
+                        mode: 'cors',
+                        headers: {
+                            'Content-Type': 'text/plain;charset=utf-8',
+                        },
+                        body: JSON.stringify(formData)
+                    });
+
+                    const resData = await response.json();
+                    if (resData.result === "success") {
+                        driveUrl = resData.fileUrl;
+                        showToast("Đã lưu vào Google Sheet & Drive thành công!");
+                    } else {
+                        throw new Error(resData.error || "Không thể lưu dữ liệu");
+                    }
+                } else {
+                    // Giả lập lưu thành công khi chưa cấu hình Web App URL
+                    await new Promise(r => setTimeout(r, 1200));
+                    driveUrl = "https://drive.google.com/drive/my-drive (URL Giả lập)";
+                    showToast("Đã lưu dữ liệu Test thành công (Chế độ Local)!");
+                }
+
+                // Hiển thị kết quả vừa lưu
+                renderLatestData(formData, driveUrl);
+
+            } catch (error) {
+                console.error(error);
+                showToast("Lỗi: " + error.message, "alert");
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = `<i data-lucide="send" class="w-4 h-4"></i> <span>Lưu & Gửi Nghiệm Thu</span>`;
+                lucide.createIcons();
+            }
+        });
+
+        // Hiển thị dữ liệu vừa nghiệm thu
+        function renderLatestData(data, driveUrl) {
+            const statusColor = data.status === 'Đạt' 
+                ? 'bg-emerald-100 text-emerald-800 border-emerald-300' 
+                : (data.status === 'Không đạt' ? 'bg-rose-100 text-rose-800 border-rose-300' : 'bg-amber-100 text-amber-800 border-amber-300');
+
+            latestDataContainer.innerHTML = `
+                <div class="border border-slate-200 rounded-lg p-4 bg-slate-50 space-y-3">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Dự án</span>
+                            <h4 class="font-bold text-slate-800 text-sm">${escapeHtml(data.projectName)}</h4>
+                        </div>
+                        <span class="px-2.5 py-0.5 text-xs font-semibold rounded-full border ${statusColor}">
+                            ${escapeHtml(data.status)}
+                        </span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2 text-xs border-t border-b border-slate-200 py-2">
+                        <div>
+                            <span class="text-slate-400 block text-[11px]">Hạng mục:</span>
+                            <span class="font-medium text-slate-700">${escapeHtml(data.itemCheck)}</span>
+                        </div>
+                        <div>
+                            <span class="text-slate-400 block text-[11px]">Người nghiệm thu:</span>
+                            <span class="font-medium text-slate-700">${escapeHtml(data.inspector)}</span>
+                        </div>
+                    </div>
+
+                    <div>
+                        <span class="text-slate-400 block text-[11px]">Ghi chú:</span>
+                        <p class="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100 mt-0.5">${escapeHtml(data.notes || "Không có")}</p>
+                    </div>
+
+                    <div>
+                        <span class="text-slate-400 block text-[11px] mb-1">Hình ảnh đính kèm:</span>
+                        <div class="relative group rounded-lg overflow-hidden border border-slate-200 bg-black max-h-48 flex justify-center items-center">
+                            <img src="${data.image}" class="max-h-48 object-contain">
+                        </div>
+                    </div>
+
+                    <div class="pt-2">
+                        <span class="text-slate-400 block text-[11px]">Liên kết hình ảnh Google Drive:</span>
+                        <a href="${driveUrl}" target="_blank" class="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1 mt-0.5 truncate font-mono">
+                            <i data-lucide="external-link" class="w-3.5 h-3.5 flex-shrink-0"></i>
+                            <span class="truncate">${driveUrl}</span>
+                        </a>
+                    </div>
+                </div>
+            `;
+            lucide.createIcons();
+        }
+
+        // Helper Toast Message
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMsg');
+            const toastIcon = document.getElementById('toastIcon');
+
+            toastMsg.textContent = message;
+            if (type === 'alert') {
+                toastIcon.setAttribute('data-lucide', 'alert-circle');
+                toastIcon.className = 'w-4 h-4 text-rose-400';
+            } else {
+                toastIcon.setAttribute('data-lucide', 'check-circle');
+                toastIcon.className = 'w-4 h-4 text-emerald-400';
+            }
+            lucide.createIcons();
+
+            toast.classList.remove('hidden', 'translate-y-2');
+            setTimeout(() => {
+                toast.classList.add('hidden', 'translate-y-2');
+            }, 3500);
+        }
+
+        function escapeHtml(text) {
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
